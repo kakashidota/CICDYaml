@@ -1,0 +1,53 @@
+trigger:
+  branches:
+    include:
+      - master
+
+stages:
+#build stage
+- stage: Build
+  jobs:
+    - job: Build
+      displayName: 'Build job'
+      pool:
+        vmImage: 'windows-latest'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '8.x'
+            installationPath: $(agent.ToolsDirectory)/dotnet
+
+        - script: |
+            dotnet build --configuration Release
+          displayName: 'Build solution'
+          
+        - script: |
+            dotnet publish -c Release -o $(Build.ArtifactStagingDirectory)
+          displayName: 'Publish Artifacts'
+          
+        - task: PublishBuildArtifacts@1
+          inputs:
+            PathtoPublish: $(Build.ArtifactStagingDirectory)
+            ArtifactName: drop
+            publishLocation: 'Container'
+
+#deply stage            
+- stage: Deploy
+  jobs:
+    - deployment: DeployWebApp
+      displayName: 'Deploy to Azure'
+      environment: 'production'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+                
+              - task: AzureWebApp@1
+                inputs:
+                  azureSubscription: 'Testing123'
+                  appType: 'webApp'
+                  appName: 'cicddemopotato'
+                  package: $(Pipeline.Workspace)/drop
